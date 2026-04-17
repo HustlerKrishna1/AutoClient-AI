@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AutoClient AI v2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:#0f172a}
+    ::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+    .fade-in{animation:fadeIn .3s ease both}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{animation:spin 1s linear infinite;display:inline-block}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    .pulse{animation:pulse 1.5s ease-in-out infinite}
+    #draft-editor{white-space:pre-wrap;font-family:ui-monospace,monospace;resize:vertical}
+    th.sortable{cursor:pointer;user-select:none}
+    th.sortable:hover{color:#e2e8f0}
+    th.sort-asc::after{content:" ↑"}
+    th.sort-desc::after{content:" ↓"}
+    .score-fill{height:4px;border-radius:2px;transition:width .5s ease}
+    .bulk-bar{transition:all .25s ease}
+    input[type=range]{accent-color:#6366f1}
+    .tab-btn.active{border-bottom-color:#6366f1;color:#e2e8f0}
+    .tab-btn{border-bottom:2px solid transparent;color:#64748b}
+    .tab-panel{display:none}
+    .tab-panel.active{display:block}
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- HEADER -->
+<header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <div class="w-7 h-7 rounded-md bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">AI</div>
+      <span class="font-semibold tracking-tight">AutoClient <span class="text-indigo-400">AI</span></span>
+      <span class="hidden sm:inline text-xs bg-slate-800 text-slate-500 rounded-full px-2 py-0.5">v2</span>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-slate-500">
+      <span id="ollama-badge" class="px-2 py-0.5 rounded-full bg-slate-800">⬤ Checking…</span>
+      <span id="lead-count-badge" class="px-2 py-0.5 rounded-full bg-slate-800">0 leads</span>
+      <a href="/docs" target="_blank" class="hover:text-slate-300 transition hidden sm:inline">API ↗</a>
+    </div>
+  </div>
+</header>
+
+<!-- TABS -->
+<div class="border-b border-slate-800 bg-slate-900 sticky top-[53px] z-20">
+  <div class="max-w-7xl mx-auto px-4 flex gap-1">
+    <button class="tab-btn active px-4 py-2.5 text-sm font-medium transition" onclick="switchTab('leads')">Leads</button>
+    <button class="tab-btn px-4 py-2.5 text-sm font-medium transition" onclick="switchTab('campaigns')">Campaigns</button>
+    <button class="tab-btn px-4 py-2.5 text-sm font-medium transition" onclick="switchTab('jobs')">Job History</button>
+    <button class="tab-btn px-4 py-2.5 text-sm font-medium transition" onclick="switchTab('settings')">Settings</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main class="flex-1 max-w-7xl mx-auto w-full px-4 py-6 space-y-5">
+
+  <!-- ══ LEADS TAB ══ -->
+  <div id="tab-leads" class="tab-panel active space-y-5">
+
+    <!-- Search card -->
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 mb-4">Find New Leads</h2>
+      <form id="scour-form" class="grid sm:grid-cols-4 gap-3">
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-slate-500 uppercase tracking-wide">Niche</label>
+          <input id="niche" type="text" placeholder="plumbers, photographers…"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" required/>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-slate-500 uppercase tracking-wide">Location</label>
+          <input id="location" type="text" placeholder="Austin TX, London UK…"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" required/>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-slate-500 uppercase tracking-wide">Campaign (opt)</label>
+          <select id="campaign-select"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+            <option value="">None</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-slate-500 uppercase tracking-wide">Max / Action</label>
+          <div class="flex gap-2">
+            <select id="max-results"
+              class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="20">20</option>
+              <option value="30">30</option>
+            </select>
+            <button type="submit" id="scour-btn"
+              class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg px-4 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
+              Scour
+            </button>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- Status banner -->
+    <div id="status-banner" class="hidden bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 flex items-center gap-3">
+      <span id="status-spinner" class="spin text-indigo-400 hidden">⟳</span>
+      <span id="status-icon" class="hidden"></span>
+      <div class="flex-1 min-w-0">
+        <p id="status-msg" class="text-sm text-slate-300 truncate"></p>
+        <div id="progress-wrap" class="hidden mt-1.5">
+          <div class="w-full bg-slate-800 rounded-full h-1.5">
+            <div id="progress-bar" class="h-1.5 rounded-full bg-indigo-500 transition-all duration-500" style="width:0%"></div>
+          </div>
+          <p id="progress-label" class="text-xs text-slate-600 mt-1"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div id="stats-bar" class="grid grid-cols-2 sm:grid-cols-4 gap-3 hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+        <div id="stat-total" class="text-2xl font-bold text-slate-200">—</div>
+        <div class="text-xs text-slate-500 mt-1">Total Leads</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+        <div id="stat-email" class="text-2xl font-bold text-indigo-400">—</div>
+        <div class="text-xs text-slate-500 mt-1">With Email</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+        <div id="stat-score" class="text-2xl font-bold text-amber-400">—</div>
+        <div class="text-xs text-slate-500 mt-1">Avg Score</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+        <div id="stat-sent" class="text-2xl font-bold text-emerald-400">—</div>
+        <div class="text-xs text-slate-500 mt-1">Sent</div>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="flex flex-wrap gap-2 items-center">
+      <input id="search-filter" type="text" placeholder="Search leads…"
+        class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-44 transition"/>
+      <select id="status-filter"
+        class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+        <option value="">All statuses</option>
+        <option value="processed">Ready</option>
+        <option value="processing">Processing</option>
+        <option value="sent">Sent</option>
+        <option value="model_offline">AI Offline</option>
+        <option value="new">New</option>
+      </select>
+      <div class="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5">
+        <span class="text-xs text-slate-500">Score ≥</span>
+        <input id="score-filter" type="range" min="0" max="10" step="0.5" value="0" class="w-20 h-1"/>
+        <span id="score-val" class="text-xs text-slate-400 w-6">0</span>
+      </div>
+      <button onclick="exportCSV()"
+        class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg px-3 py-1.5 text-xs transition">
+        ↓ CSV
+      </button>
+      <button onclick="fetchLeads()"
+        class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg px-3 py-1.5 text-xs transition">
+        ↺
+      </button>
+      <span class="ml-auto text-xs text-slate-600" id="filter-count"></span>
+    </div>
+
+    <!-- Bulk actions bar (hidden until rows selected) -->
+    <div id="bulk-bar" class="hidden bulk-bar bg-indigo-950/60 border border-indigo-800 rounded-xl px-4 py-2.5 flex items-center gap-3 flex-wrap">
+      <span id="bulk-count" class="text-sm font-medium text-indigo-300"></span>
+      <button onclick="bulkSend()"
+        class="text-xs px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white transition">Send All</button>
+      <button onclick="bulkDelete()"
+        class="text-xs px-3 py-1.5 rounded-lg bg-red-800 hover:bg-red-700 text-white transition">Delete</button>
+      <button onclick="bulkExport()"
+        class="text-xs px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition">Export CSV</button>
+      <button onclick="clearSelection()"
+        class="ml-auto text-xs text-slate-500 hover:text-slate-300 transition">✕ Clear</button>
+    </div>
+
+    <!-- Leads table -->
+    <div class="overflow-x-auto rounded-xl border border-slate-800">
+      <table class="w-full text-sm min-w-[800px]">
+        <thead>
+          <tr class="bg-slate-900 border-b border-slate-800 text-xs text-slate-500 uppercase tracking-wider">
+            <th class="px-3 py-3 w-8">
+              <input type="checkbox" id="select-all" onchange="toggleSelectAll(this)" class="accent-indigo-500 cursor-pointer"/>
+            </th>
+            <th class="text-left px-3 py-3 sortable font-medium" data-col="name" onclick="sortBy('name')">Business</th>
+            <th class="text-left px-3 py-3 sortable font-medium" data-col="email" onclick="sortBy('email')">Contact</th>
+            <th class="text-left px-3 py-3 sortable font-medium w-28" data-col="score" onclick="sortBy('score')">Score</th>
+            <th class="text-left px-3 py-3 font-medium">Niche</th>
+            <th class="text-left px-3 py-3 sortable font-medium" data-col="status" onclick="sortBy('status')">Status</th>
+            <th class="text-left px-3 py-3 font-medium">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="leads-tbody" class="divide-y divide-slate-800/50 bg-slate-950">
+          <tr id="empty-row">
+            <td colspan="7" class="text-center text-slate-600 py-14 text-sm">
+              No leads yet — run a scour to get started.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination" class="hidden flex items-center justify-between text-xs text-slate-500">
+      <span id="page-info"></span>
+      <div class="flex gap-2">
+        <button id="prev-btn" onclick="changePage(-1)"
+          class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition disabled:opacity-30">← Prev</button>
+        <button id="next-btn" onclick="changePage(1)"
+          class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition disabled:opacity-30">Next →</button>
+      </div>
+    </div>
+
+  </div><!-- /tab-leads -->
+
+  <!-- ══ CAMPAIGNS TAB ══ -->
+  <div id="tab-campaigns" class="tab-panel space-y-5">
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-semibold text-slate-300">Campaigns</h2>
+      <button onclick="showNewCampaignForm()"
+        class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition">+ New Campaign</button>
+    </div>
+
+    <!-- New campaign form (hidden by default) -->
+    <div id="new-campaign-form" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+      <h3 class="text-sm font-medium text-slate-300">New Campaign</h3>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <input id="c-name" type="text" placeholder="Campaign name" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+        <input id="c-niche" type="text" placeholder="Niche" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+        <input id="c-location" type="text" placeholder="Location" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="createCampaign()" class="text-xs px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition">Create</button>
+        <button onclick="document.getElementById('new-campaign-form').classList.add('hidden')" class="text-xs px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Cancel</button>
+      </div>
+    </div>
+
+    <div id="campaigns-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="text-slate-600 text-sm col-span-3 py-10 text-center">No campaigns yet.</div>
+    </div>
+  </div><!-- /tab-campaigns -->
+
+  <!-- ══ JOBS TAB ══ -->
+  <div id="tab-jobs" class="tab-panel space-y-4">
+    <h2 class="text-sm font-semibold text-slate-300">Job History (last 10)</h2>
+    <div id="jobs-list" class="space-y-2">
+      <div class="text-slate-600 text-sm py-8 text-center">No jobs run yet.</div>
+    </div>
+  </div><!-- /tab-jobs -->
+
+  <!-- ══ SETTINGS TAB ══ -->
+  <div id="tab-settings" class="tab-panel space-y-5">
+    <h2 class="text-sm font-semibold text-slate-300">Settings</h2>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 max-w-lg">
+      <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Sender Identity</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-slate-500">Your Name</label>
+          <input id="s-sender-name" type="text" placeholder="Alex"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+        </div>
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-slate-500">Company</label>
+          <input id="s-sender-company" type="text" placeholder="GrowthForge"
+            class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+        </div>
+      </div>
+      <p class="text-xs text-slate-600">Saved locally. Sent to the AI when generating email drafts.</p>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 max-w-lg">
+      <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Model</h3>
+      <div id="model-info" class="text-sm text-slate-400">Loading…</div>
+    </div>
+
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 max-w-lg">
+      <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Keyboard Shortcuts</h3>
+      <div class="space-y-2 text-xs text-slate-500">
+        <div class="flex justify-between"><span>Focus search</span><kbd class="bg-slate-800 px-1.5 py-0.5 rounded">S</kbd></div>
+        <div class="flex justify-between"><span>Export CSV</span><kbd class="bg-slate-800 px-1.5 py-0.5 rounded">E</kbd></div>
+        <div class="flex justify-between"><span>Close modal</span><kbd class="bg-slate-800 px-1.5 py-0.5 rounded">Esc</kbd></div>
+        <div class="flex justify-between"><span>This panel</span><kbd class="bg-slate-800 px-1.5 py-0.5 rounded">?</kbd></div>
+      </div>
+    </div>
+
+    <button onclick="saveSettings()"
+      class="text-sm px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition">
+      Save Settings
+    </button>
+
+    <!-- Scheduled Jobs -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 max-w-2xl">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Scheduled Jobs</h3>
+        <button onclick="toggleScheduleForm()"
+          class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition">+ New Schedule</button>
+      </div>
+
+      <!-- New schedule form (hidden by default) -->
+      <div id="new-schedule-form" class="hidden space-y-3 border border-slate-700 rounded-xl p-4 bg-slate-800/50">
+        <h4 class="text-xs font-semibold text-slate-400">New Recurring Scrape</h4>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-slate-500">Job ID (unique name)</label>
+            <input id="sj-id" type="text" placeholder="e.g. weekly-plumbers-austin"
+              class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-slate-500">Niche</label>
+            <input id="sj-niche" type="text" placeholder="plumbers"
+              class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-slate-500">Location</label>
+            <input id="sj-location" type="text" placeholder="Austin TX"
+              class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-slate-500">Max Results</label>
+            <select id="sj-max"
+              class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="20">20</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1 sm:col-span-2">
+            <label class="text-xs text-slate-500">Cron Expression <span class="text-slate-600">(UTC) — <a href="https://crontab.guru" target="_blank" class="text-indigo-500 hover:text-indigo-400">crontab.guru ↗</a></span></label>
+            <input id="sj-cron" type="text" placeholder="0 9 * * 1  (Mon 09:00)"
+              class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            <div class="flex gap-2 flex-wrap mt-1">
+              <button type="button" onclick="setCron('0 9 * * 1')" class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-400 transition">Mon 9am</button>
+              <button type="button" onclick="setCron('0 9 * * 1,3,5')" class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-400 transition">Mon/Wed/Fri 9am</button>
+              <button type="button" onclick="setCron('0 8 * * *')" class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-400 transition">Daily 8am</button>
+              <button type="button" onclick="setCron('0 0 1 * *')" class="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-400 transition">1st of month</button>
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="createSchedule()" class="text-xs px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition">Save Schedule</button>
+          <button onclick="toggleScheduleForm()" class="text-xs px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Scheduled jobs list -->
+      <div id="schedule-list" class="space-y-2">
+        <div class="text-slate-600 text-xs py-4 text-center">Loading…</div>
+      </div>
+    </div>
+
+  </div><!-- /tab-settings -->
+
+</main><!-- /main -->
+
+<!-- ══ DRAFT MODAL ══ -->
+<div id="modal-overlay" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 hidden" onclick="closeModal(event)">
+  <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col shadow-2xl">
+    <div class="flex items-start justify-between px-5 py-4 border-b border-slate-800">
+      <div>
+        <h3 id="modal-title" class="font-semibold text-slate-100"></h3>
+        <p id="modal-meta" class="text-xs text-slate-500 mt-0.5"></p>
+        <p id="modal-subject-b" class="text-xs text-indigo-400 mt-1 hidden"></p>
+      </div>
+      <button onclick="closeModal()" class="text-slate-500 hover:text-slate-200 transition text-xl leading-none ml-4">✕</button>
+    </div>
+    <div class="flex-1 overflow-y-auto px-5 py-4">
+      <textarea id="draft-editor"
+        class="w-full h-64 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+        placeholder="No draft available."></textarea>
+    </div>
+    <div id="modal-notes-row" class="px-5 pb-3">
+      <textarea id="modal-notes" rows="2"
+        class="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-2 text-xs text-slate-400 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-600 transition"
+        placeholder="Add private notes about this lead…"></textarea>
+    </div>
+    <div class="px-5 py-3 border-t border-slate-800 flex flex-wrap gap-2 justify-end">
+      <button onclick="saveDraftEdit()" class="text-xs px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition">Save Draft</button>
+      <button onclick="saveNotes()" class="text-xs px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition">Save Notes</button>
+      <button id="modal-dnc-btn" onclick="markDNC()" class="text-xs px-4 py-2 rounded-lg bg-red-900/60 hover:bg-red-800 text-red-300 transition">Do Not Contact</button>
+      <button id="modal-send-btn" class="text-xs px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition disabled:opacity-40">Send Email</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TOAST ══ -->
+<div id="toast" class="fixed bottom-5 right-5 z-50 rounded-xl px-4 py-3 text-sm shadow-xl transition-all duration-300 opacity-0 translate-y-4 pointer-events-none border bg-slate-900"></div>
+
+<!-- ══ JAVASCRIPT ══ -->
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let allLeads      = [];
+let filteredLeads = [];
+let currentPage   = 1;
+const PAGE_SIZE   = 50;
+let pollTimer     = null;
+let autoRefreshTimer = null;
+let modalLeadId   = null;
+let selectedIds   = new Set();
+let sortCol       = 'score';
+let sortDir       = 'desc';
+let debounceTimer = null;
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  fetchLeads();
+  fetchStats();
+  fetchCampaigns();
+  checkHealth();
+  startAutoRefresh();
+
+  document.getElementById('search-filter').addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => { currentPage = 1; applyFiltersAndRender(); }, 300);
+  });
+  document.getElementById('status-filter').addEventListener('change', () => { currentPage = 1; applyFiltersAndRender(); });
+  document.getElementById('score-filter').addEventListener('input', e => {
+    document.getElementById('score-val').textContent = e.target.value;
+    currentPage = 1;
+    applyFiltersAndRender();
+  });
+});
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    const names = ['leads','campaigns','jobs','settings'];
+    b.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'campaigns') fetchCampaigns();
+  if (name === 'jobs') fetchJobs();
+  if (name === 'settings') { fetchConfig(); fetchSchedule(); }
+}
+
+// ─── Health check ─────────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const d = await apiFetch('/health');
+    const badge = document.getElementById('ollama-badge');
+    if (d.ollama === 'online') {
+      badge.textContent = '⬤ Ollama online';
+      badge.className = 'px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 text-xs';
+    } else {
+      badge.textContent = '⬤ Ollama offline';
+      badge.className = 'px-2 py-0.5 rounded-full bg-red-950 text-red-400 text-xs';
+    }
+  } catch { /* silently ignore */ }
+}
+
+// ─── Scour form ───────────────────────────────────────────────────────────────
+document.getElementById('scour-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const niche     = document.getElementById('niche').value.trim();
+  const location  = document.getElementById('location').value.trim();
+  const maxRes    = +document.getElementById('max-results').value;
+  const campaignId = document.getElementById('campaign-select').value || null;
+  const btn       = document.getElementById('scour-btn');
+
+  btn.disabled = true; btn.textContent = '⟳';
+
+  try {
+    const d = await apiFetch('/scour', 'POST', { niche, location, max_results: maxRes, campaign_id: campaignId ? +campaignId : null });
+    toast('Pipeline started!', 'success');
+    startPolling();
+  } catch (err) {
+    toast(err.message || 'Failed to start.', 'error');
+    btn.disabled = false; btn.textContent = 'Scour';
+  }
+});
+
+// ─── Status polling ───────────────────────────────────────────────────────────
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollStatus, 2000);
+  document.getElementById('status-banner').classList.remove('hidden');
+  pollStatus();
+}
+
+async function pollStatus() {
+  try {
+    const s = await apiFetch('/status');
+    renderStatus(s);
+    if (!s.running) {
+      clearInterval(pollTimer); pollTimer = null;
+      const btn = document.getElementById('scour-btn');
+      btn.disabled = false; btn.textContent = 'Scour';
+      fetchLeads(); fetchStats();
+    }
+  } catch {}
+}
+
+function renderStatus(s) {
+  const spinner = document.getElementById('status-spinner');
+  const icon    = document.getElementById('status-icon');
+  const msg     = document.getElementById('status-msg');
+  const wrap    = document.getElementById('progress-wrap');
+  const bar     = document.getElementById('progress-bar');
+  const lbl     = document.getElementById('progress-label');
+  const banner  = document.getElementById('status-banner');
+
+  msg.textContent = s.message;
+  if (s.running) {
+    spinner.classList.remove('hidden'); icon.classList.add('hidden');
+    banner.classList.replace('border-slate-700','border-indigo-700');
+  } else {
+    spinner.classList.add('hidden'); icon.classList.remove('hidden');
+    icon.textContent = s.message.startsWith('✅') ? '✅' : s.message.startsWith('❌') ? '❌' : 'ℹ️';
+    banner.classList.replace('border-indigo-700','border-slate-700');
+  }
+  if (s.total > 0) {
+    wrap.classList.remove('hidden');
+    const pct = Math.round((s.processed / s.total) * 100);
+    bar.style.width = pct + '%';
+    lbl.textContent = `${s.processed}/${s.total} processed${s.errors ? ', '+s.errors+' errors' : ''}`;
+  } else wrap.classList.add('hidden');
+}
+
+// ─── Auto-refresh ─────────────────────────────────────────────────────────────
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(() => {
+    if (!pollTimer) fetchLeads(); // only refresh when pipeline is idle
+  }, 10000);
+}
+
+// ─── Leads fetching ───────────────────────────────────────────────────────────
+async function fetchLeads() {
+  try {
+    const d = await apiFetch('/leads?limit=500');
+    allLeads = d.items || [];
+    currentPage = 1;
+    applyFiltersAndRender();
+    document.getElementById('lead-count-badge').textContent = `${allLeads.length} leads`;
+  } catch {}
+}
+
+async function fetchStats() {
+  try {
+    const s = await apiFetch('/leads/stats');
+    document.getElementById('stats-bar').classList.remove('hidden');
+    document.getElementById('stat-total').textContent = s.total;
+    document.getElementById('stat-email').textContent = s.with_email;
+    document.getElementById('stat-score').textContent = s.avg_score.toFixed(1);
+    document.getElementById('stat-sent').textContent  = s.sent;
+  } catch {}
+}
+
+// ─── Filter + sort + paginate ─────────────────────────────────────────────────
+function applyFiltersAndRender() {
+  const q        = document.getElementById('search-filter').value.toLowerCase();
+  const st       = document.getElementById('status-filter').value;
+  const minScore = parseFloat(document.getElementById('score-filter').value) || 0;
+
+  filteredLeads = allLeads.filter(l => {
+    if (l.do_not_contact) return false;
+    if (st && l.status !== st) return false;
+    if (minScore > 0 && (l.score || 0) < minScore) return false;
+    if (q) {
+      const hay = [l.name, l.email, l.website, l.niche, l.location, l.phone].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Sort
+  filteredLeads.sort((a, b) => {
+    let va = a[sortCol] ?? '', vb = b[sortCol] ?? '';
+    if (typeof va === 'string') va = va.toLowerCase();
+    if (typeof vb === 'string') vb = vb.toLowerCase();
+    if (va < vb) return sortDir === 'asc' ? -1 : 1;
+    if (va > vb) return sortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  document.getElementById('filter-count').textContent =
+    filteredLeads.length !== allLeads.length ? `${filteredLeads.length} of ${allLeads.length}` : '';
+
+  renderPage();
+  renderPagination();
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  else { sortCol = col; sortDir = col === 'score' ? 'desc' : 'asc'; }
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('sort-asc','sort-desc');
+    if (th.dataset.col === sortCol) th.classList.add('sort-'+sortDir);
+  });
+  applyFiltersAndRender();
+}
+
+function renderPage() {
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredLeads.slice(start, start + PAGE_SIZE);
+  const tbody = document.getElementById('leads-tbody');
+
+  if (!page.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center text-slate-600 py-14 text-sm">
+      ${allLeads.length ? 'No leads match your filter.' : 'No leads yet — run a scour to get started.'}
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = page.map(buildRow).join('');
+}
+
+function renderPagination() {
+  const total = filteredLeads.length;
+  const pages = Math.ceil(total / PAGE_SIZE);
+  const pg    = document.getElementById('pagination');
+  if (pages <= 1) { pg.classList.add('hidden'); return; }
+  pg.classList.remove('hidden');
+  document.getElementById('page-info').textContent = `Page ${currentPage} of ${pages}  (${total} leads)`;
+  document.getElementById('prev-btn').disabled = currentPage <= 1;
+  document.getElementById('next-btn').disabled = currentPage >= pages;
+}
+
+function changePage(delta) {
+  const pages = Math.ceil(filteredLeads.length / PAGE_SIZE);
+  currentPage = Math.max(1, Math.min(pages, currentPage + delta));
+  renderPage();
+  renderPagination();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ─── Row builder ──────────────────────────────────────────────────────────────
+function buildRow(l) {
+  const sc = l.score || 0;
+  const scoreCol = sc >= 7 ? 'text-emerald-400' : sc >= 4 ? 'text-amber-400' : 'text-red-400';
+  const scoreBg  = sc >= 7 ? 'bg-emerald-500' : sc >= 4 ? 'bg-amber-500' : 'bg-red-500';
+  const checked  = selectedIds.has(l.id) ? 'checked' : '';
+
+  const emailHtml = l.email
+    ? `<div class="text-xs text-slate-400 truncate max-w-[160px]" title="${esc(l.email)}">${esc(trunc(l.email,28))}</div>`
+    : `<div class="text-xs text-slate-700">no email</div>`;
+  const phoneHtml = l.phone
+    ? `<div class="text-xs text-slate-600">${esc(l.phone)}</div>`
+    : '';
+  const webHtml = l.website
+    ? `<a href="${esc(l.website)}" target="_blank" class="text-xs text-indigo-400 hover:text-indigo-300 truncate max-w-[160px] block" title="${esc(l.website)}">${esc(trunc(l.website,36))}</a>`
+    : '';
+
+  const sendDisabled = l.status !== 'processed' || !l.email || l.status === 'sent';
+  const sendClass    = l.status === 'sent'
+    ? 'bg-slate-800 text-slate-600 cursor-default'
+    : sendDisabled
+      ? 'bg-slate-800 text-slate-700 cursor-not-allowed opacity-40'
+      : 'bg-emerald-800 hover:bg-emerald-700 text-white cursor-pointer';
+
+  return `
+  <tr class="fade-in hover:bg-slate-900/40 transition-colors" data-id="${l.id}">
+    <td class="px-3 py-3">
+      <input type="checkbox" ${checked} onchange="toggleRow(${l.id},this)" class="accent-indigo-500 cursor-pointer"/>
+    </td>
+    <td class="px-3 py-3">
+      <div class="font-medium text-slate-200 truncate max-w-[180px]" title="${esc(l.name)}">${esc(trunc(l.name,36))}</div>
+      ${webHtml}
+    </td>
+    <td class="px-3 py-3">${emailHtml}${phoneHtml}</td>
+    <td class="px-3 py-3">
+      ${sc > 0 ? `
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold ${scoreCol} w-7">${sc.toFixed(1)}</span>
+        <div class="flex-1 bg-slate-800 rounded-full overflow-hidden" style="height:3px;min-width:40px">
+          <div class="${scoreBg} score-fill" style="width:${sc*10}%"></div>
+        </div>
+      </div>` : '<span class="text-slate-700 text-xs">—</span>'}
+    </td>
+    <td class="px-3 py-3 text-xs">
+      <div class="text-slate-500">${esc(l.niche||'—')}</div>
+      <div class="text-slate-700">${esc(l.location||'')}</div>
+    </td>
+    <td class="px-3 py-3">${badgeHtml(l.status)}</td>
+    <td class="px-3 py-3">
+      <div class="flex gap-1.5">
+        <button onclick="openModal(${l.id})" ${l.draft?'':'disabled'}
+          class="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition ${l.draft?'':'opacity-30'}">
+          Draft
+        </button>
+        <button onclick="${!sendDisabled?`sendLead(${l.id})`:'void(0)'}" ${sendDisabled?'disabled':''}
+          class="text-xs px-2.5 py-1.5 rounded-lg ${sendClass} transition font-medium">
+          ${l.status==='sent'?'✓':'Send'}
+        </button>
+      </div>
+    </td>
+  </tr>`;
+}
+
+function badgeHtml(s) {
+  const map = {
+    new:'bg-slate-800 text-slate-500',
+    processing:'bg-indigo-900/60 text-indigo-300 pulse',
+    processed:'bg-emerald-900/60 text-emerald-300',
+    model_offline:'bg-red-900/60 text-red-400',
+    error:'bg-orange-900/60 text-orange-400',
+    sent:'bg-sky-900/60 text-sky-300',
+  };
+  const lbl = {new:'New',processing:'Processing…',processed:'Ready',model_offline:'AI Offline',error:'Error',sent:'Sent'};
+  const cls = map[s] || 'bg-slate-800 text-slate-500';
+  return `<span class="text-xs px-2 py-0.5 rounded-full font-medium ${cls}">${lbl[s]||s}</span>`;
+}
+
+// ─── Selection & bulk actions ──────────────────────────────────────────────────
+function toggleRow(id, el) {
+  el.checked ? selectedIds.add(id) : selectedIds.delete(id);
+  updateBulkBar();
+}
+
+function toggleSelectAll(el) {
+  const start = (currentPage-1)*PAGE_SIZE;
+  const ids   = filteredLeads.slice(start, start+PAGE_SIZE).map(l=>l.id);
+  if (el.checked) ids.forEach(id => selectedIds.add(id));
+  else ids.forEach(id => selectedIds.delete(id));
+  renderPage();
+  updateBulkBar();
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  document.getElementById('select-all').checked = false;
+  renderPage();
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulk-bar');
+  const cnt = document.getElementById('bulk-count');
+  if (selectedIds.size > 0) {
+    bar.classList.remove('hidden');
+    cnt.textContent = `${selectedIds.size} lead${selectedIds.size>1?'s':''} selected`;
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
+async function bulkSend() {
+  const ids = [...selectedIds];
+  let sent = 0;
+  for (const id of ids) {
+    try { await apiFetch(`/send/${id}`, 'POST'); sent++; } catch {}
+  }
+  toast(`Sent ${sent}/${ids.length} emails.`, 'success');
+  clearSelection(); fetchLeads();
+}
+
+async function bulkDelete() {
+  if (!confirm(`Delete ${selectedIds.size} lead(s)?`)) return;
+  const ids = [...selectedIds];
+  await apiFetch('/leads', 'DELETE', { ids });
+  toast(`Deleted ${ids.length} leads.`, 'success');
+  clearSelection(); fetchLeads(); fetchStats();
+}
+
+function bulkExport() {
+  const ids = [...selectedIds].join(',');
+  window.location.href = `/leads/export?ids=${ids}`;
+}
+
+// ─── CSV export ───────────────────────────────────────────────────────────────
+function exportCSV() {
+  const st = document.getElementById('status-filter').value;
+  const n  = document.getElementById('search-filter').value;
+  let url  = '/leads/export';
+  const params = [];
+  if (st) params.push('status='+encodeURIComponent(st));
+  if (url.includes('?')) url += '&'; else if (params.length) url += '?';
+  url += params.join('&');
+  window.location.href = url;
+}
+
+// ─── Modal ────────────────────────────────────────────────────────────────────
+function openModal(id) {
+  const l = allLeads.find(x => x.id === id);
+  if (!l) return;
+  modalLeadId = id;
+
+  document.getElementById('modal-title').textContent = l.name;
+  document.getElementById('modal-meta').textContent  =
+    `Score ${(l.score||0).toFixed(1)}/10  ·  ${l.email||'no email'}  ·  ${l.status}`;
+
+  const subB = document.getElementById('modal-subject-b');
+  if (l.subject_line_b) {
+    subB.textContent = `Alt subject: ${l.subject_line_b}`;
+    subB.classList.remove('hidden');
+  } else subB.classList.add('hidden');
+
+  // Show edited draft if saved, else AI draft
+  document.getElementById('draft-editor').value = l.edited_draft || l.draft || '';
+  document.getElementById('modal-notes').value  = l.notes || '';
+
+  const sendBtn = document.getElementById('modal-send-btn');
+  const ready   = l.status === 'processed' && l.email;
+  sendBtn.disabled    = l.status==='sent' || !ready;
+  sendBtn.textContent = l.status==='sent' ? '✓ Sent' : 'Send Email';
+  sendBtn.onclick     = () => sendLead(id, true);
+
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+function closeModal(e) {
+  if (!e || e.target===document.getElementById('modal-overlay') || !e.currentTarget) {
+    document.getElementById('modal-overlay').classList.add('hidden');
+    modalLeadId = null;
+  }
+}
+
+async function saveDraftEdit() {
+  if (!modalLeadId) return;
+  const draft = document.getElementById('draft-editor').value;
+  await apiFetch(`/leads/${modalLeadId}`, 'PUT', { edited_draft: draft });
+  toast('Draft saved.', 'success');
+  const lead = allLeads.find(l => l.id === modalLeadId);
+  if (lead) lead.edited_draft = draft;
+}
+
+async function saveNotes() {
+  if (!modalLeadId) return;
+  const notes = document.getElementById('modal-notes').value;
+  await apiFetch(`/leads/${modalLeadId}`, 'PUT', { notes });
+  toast('Notes saved.', 'success');
+  const lead = allLeads.find(l => l.id === modalLeadId);
+  if (lead) lead.notes = notes;
+}
+
+async function markDNC() {
+  if (!modalLeadId) return;
+  if (!confirm('Mark this lead as Do Not Contact? It will be hidden from the table.')) return;
+  await apiFetch(`/leads/${modalLeadId}`, 'PUT', { do_not_contact: true });
+  toast('Lead marked Do Not Contact.', 'success');
+  closeModal();
+  fetchLeads();
+}
+
+// ─── Send ─────────────────────────────────────────────────────────────────────
+async function sendLead(id, fromModal=false) {
+  try {
+    const d = await apiFetch(`/send/${id}`, 'POST');
+    toast(`Logged to console: ${d.message}`, 'success');
+    if (fromModal) closeModal();
+    await fetchLeads();
+  } catch (err) { toast(err.message||'Send failed.','error'); }
+}
+
+// ─── Campaigns ────────────────────────────────────────────────────────────────
+async function fetchCampaigns() {
+  try {
+    const list = await apiFetch('/campaigns');
+    // Populate dropdown in scour form
+    const sel = document.getElementById('campaign-select');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">None</option>' +
+      list.map(c => `<option value="${c.id}" ${c.id==cur?'selected':''}>${esc(c.name)}</option>`).join('');
+
+    // Render campaign grid
+    const grid = document.getElementById('campaigns-grid');
+    if (!list.length) {
+      grid.innerHTML = '<div class="text-slate-600 text-sm col-span-3 py-10 text-center">No campaigns yet.</div>';
+      return;
+    }
+    grid.innerHTML = list.map(c => `
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+        <div class="flex items-start justify-between">
+          <div>
+            <div class="font-medium text-slate-200">${esc(c.name)}</div>
+            <div class="text-xs text-slate-500">${esc(c.niche)} · ${esc(c.location)}</div>
+          </div>
+          <span class="text-xs px-2 py-0.5 rounded-full ${c.status==='active'?'bg-emerald-900/60 text-emerald-300':'bg-slate-800 text-slate-500'}">${c.status}</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div><div class="text-lg font-bold text-slate-300">${c.total}</div><div class="text-xs text-slate-600">leads</div></div>
+          <div><div class="text-lg font-bold text-sky-400">${c.sent}</div><div class="text-xs text-slate-600">sent</div></div>
+          <div><div class="text-lg font-bold text-amber-400">${c.avg_score||'—'}</div><div class="text-xs text-slate-600">avg score</div></div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="sendAllInCampaign(${c.id})"
+            class="flex-1 text-xs px-3 py-1.5 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-white transition">Send All</button>
+          <button onclick="archiveCampaign(${c.id})"
+            class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 transition">Archive</button>
+        </div>
+      </div>
+    `).join('');
+  } catch {}
+}
+
+function showNewCampaignForm() {
+  document.getElementById('new-campaign-form').classList.toggle('hidden');
+}
+
+async function createCampaign() {
+  const name = document.getElementById('c-name').value.trim();
+  const niche = document.getElementById('c-niche').value.trim();
+  const loc   = document.getElementById('c-location').value.trim();
+  if (!name||!niche||!loc) { toast('Fill in all fields.','error'); return; }
+  await apiFetch('/campaigns','POST',{name,niche,location:loc});
+  toast('Campaign created!','success');
+  document.getElementById('new-campaign-form').classList.add('hidden');
+  fetchCampaigns();
+}
+
+async function sendAllInCampaign(id) {
+  if (!confirm('Send all ready leads in this campaign?')) return;
+  const d = await apiFetch(`/campaigns/${id}/send-all`,'POST');
+  toast(`Sent ${d.sent} emails.`,'success');
+  fetchCampaigns(); fetchLeads();
+}
+
+async function archiveCampaign(id) {
+  await apiFetch(`/campaigns/${id}`,'DELETE');
+  toast('Campaign archived.','success');
+  fetchCampaigns();
+}
+
+// ─── Jobs ─────────────────────────────────────────────────────────────────────
+async function fetchJobs() {
+  try {
+    const jobs = await apiFetch('/jobs');
+    const el   = document.getElementById('jobs-list');
+    if (!jobs.length) {
+      el.innerHTML = '<div class="text-slate-600 text-sm py-8 text-center">No jobs run yet.</div>';
+      return;
+    }
+    el.innerHTML = jobs.map(j => `
+      <div class="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 flex flex-wrap gap-4 items-center text-sm">
+        <div class="font-medium text-slate-300">${esc(j.niche)} · ${esc(j.location)}</div>
+        <div class="flex gap-4 text-xs text-slate-500 ml-auto flex-wrap">
+          <span>Found <b class="text-slate-300">${j.found}</b></span>
+          <span>Processed <b class="text-slate-300">${j.processed}</b></span>
+          ${j.errors?`<span>Errors <b class="text-red-400">${j.errors}</b></span>`:''}
+          <span>${new Date(j.finished_at).toLocaleString()}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch {}
+}
+
+// ─── Scheduled jobs ───────────────────────────────────────────────────────────
+async function fetchSchedule() {
+  try {
+    const jobs = await apiFetch('/schedule');
+    const el   = document.getElementById('schedule-list');
+    if (!jobs.length) {
+      el.innerHTML = '<div class="text-slate-600 text-xs py-4 text-center">No scheduled jobs yet.</div>';
+      return;
+    }
+    el.innerHTML = jobs.map(j => `
+      <div class="flex items-center justify-between bg-slate-800 rounded-lg px-4 py-3 text-xs gap-3">
+        <div class="min-w-0">
+          <div class="font-medium text-slate-300 truncate">${esc(j.id)}</div>
+          <div class="text-slate-500 font-mono">${esc(j.trigger)}</div>
+          ${j.next_run ? `<div class="text-slate-600">Next: ${new Date(j.next_run).toLocaleString()}</div>` : ''}
+        </div>
+        <button onclick="deleteSchedule('${esc(j.id)}')"
+          class="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg bg-red-900/50 hover:bg-red-800 text-red-400 transition">Remove</button>
+      </div>
+    `).join('');
+  } catch {
+    document.getElementById('schedule-list').innerHTML =
+      '<div class="text-slate-600 text-xs py-4 text-center">Could not load schedule.</div>';
+  }
+}
+
+function toggleScheduleForm() {
+  document.getElementById('new-schedule-form').classList.toggle('hidden');
+}
+
+function setCron(expr) {
+  document.getElementById('sj-cron').value = expr;
+}
+
+async function createSchedule() {
+  const job_id      = document.getElementById('sj-id').value.trim();
+  const niche       = document.getElementById('sj-niche').value.trim();
+  const location    = document.getElementById('sj-location').value.trim();
+  const max_results = +document.getElementById('sj-max').value;
+  const cron_expr   = document.getElementById('sj-cron').value.trim();
+
+  if (!job_id || !niche || !location || !cron_expr) {
+    toast('Fill in all fields.', 'error'); return;
+  }
+  try {
+    await apiFetch('/schedule', 'POST', { job_id, niche, location, max_results, cron_expr });
+    toast(`Job "${job_id}" scheduled!`, 'success');
+    toggleScheduleForm();
+    fetchSchedule();
+  } catch (err) {
+    toast(err.message || 'Failed to schedule job.', 'error');
+  }
+}
+
+async function deleteSchedule(job_id) {
+  if (!confirm(`Remove scheduled job "${job_id}"?`)) return;
+  try {
+    await apiFetch(`/schedule/${encodeURIComponent(job_id)}`, 'DELETE');
+    toast('Job removed.', 'success');
+    fetchSchedule();
+  } catch (err) {
+    toast(err.message || 'Failed to remove job.', 'error');
+  }
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+function loadSettings() {
+  document.getElementById('s-sender-name').value    = localStorage.getItem('senderName')    || '';
+  document.getElementById('s-sender-company').value = localStorage.getItem('senderCompany') || '';
+}
+
+function saveSettings() {
+  localStorage.setItem('senderName',    document.getElementById('s-sender-name').value.trim());
+  localStorage.setItem('senderCompany', document.getElementById('s-sender-company').value.trim());
+  toast('Settings saved (env vars take precedence on the server).', 'success');
+}
+
+async function fetchConfig() {
+  try {
+    const c = await apiFetch('/config');
+    document.getElementById('model-info').innerHTML =
+      `<span class="font-medium text-slate-300">${esc(c.model)}</span>
+       <span class="text-slate-600 ml-2">· ${esc(c.sender_name)} @ ${esc(c.sender_company)}</span>`;
+  } catch {}
+}
+
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+    if (e.key === 'Escape') { e.target.blur(); closeModal(); }
+    return;
+  }
+  switch (e.key) {
+    case 's': case 'S': document.getElementById('search-filter').focus(); e.preventDefault(); break;
+    case 'e': case 'E': exportCSV(); break;
+    case '?': switchTab('settings'); break;
+    case 'Escape': closeModal(); break;
+  }
+});
+
+// ─── API helper ───────────────────────────────────────────────────────────────
+async function apiFetch(url, method='GET', body=null) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function trunc(s, n) { return s && s.length > n ? s.slice(0,n)+'…' : (s||''); }
+
+let toastT;
+function toast(msg, type='info') {
+  const el = document.getElementById('toast');
+  const cols = {error:'border-red-600 text-red-300', success:'border-emerald-600 text-emerald-300', info:'border-slate-600 text-slate-300'};
+  el.className = `fixed bottom-5 right-5 z-50 bg-slate-900 border rounded-xl px-4 py-3 text-sm shadow-xl transition-all duration-300 ${cols[type]||cols.info}`;
+  el.textContent = msg;
+  el.style.opacity='1'; el.style.transform='translateY(0)';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { el.style.opacity='0'; el.style.transform='translateY(16px)'; }, 3500);
+}
+</script>
+</body>
+</html>

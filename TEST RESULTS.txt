@@ -1,0 +1,47 @@
+TEST RESULTS
+Scraper (plumber / Austin TX / 2 results):
+
+DDG page 1 | 200 OK | +2 results
+Playwright visited 2 sites → email=— phone=—
+Browser closed cleanly
+
+AI Enrichment (llama3:8b, CPU):
+
+Lead 1: "Plumbing Services | Faucets Near You"
+  score=7.0  status=processed
+  subject_a="What's the #1 Thing Holding Your Bathroom Renovation Back?"
+  subject_b="Get Your Plumbing Business Ahead with Expert Advice & Fast Shipping"
+
+Lead 2: "THE BEST 10 Plumbing in AUSTIN, TX - Yelp"  
+  score=6.0  status=processed
+  subject_a="Uncover Why Your Competition is Leaving Money on the Table"
+  subject_b="Boost Your Online Visibility and Attract More Customers"
+
+All API endpoints verified:
+
+GET  /           → 200  text/html  46,531 bytes (dashboard)
+GET  /health     → {"status":"ok","ollama":"online"}
+GET  /config     → {"model":"llama3:8b","sender_name":"Alex",...}
+POST /scour      → {"status":"started"}
+GET  /status     → {"running":false,"message":"✅ Done! 2/2 enriched",...}
+GET  /leads      → {"items":[...],"total":2,"page":1,"pages":1}
+GET  /leads/stats→ {"total":2,"sent":1,"with_email":0,"avg_score":6.5,...}
+GET  /leads/export → valid CSV with headers + 2 data rows
+PUT  /leads/1    → {"updated":1}
+POST /send/1     → {"message":"Simulated send → (no email)","lead_id":1}
+POST /send/1(×2) → {"message":"Already sent.","lead_id":1}  ← idempotent ✓
+GET  /jobs       → [{"niche":"plumber","found":2,"processed":2,"errors":0,...}]
+POST /campaigns  → {"campaign_id":1}
+GET  /campaigns  → [{"id":1,"name":"Demo Campaign",...}]
+
+Server log — SEND simulation output:
+
+============================================================
+[SEND SIMULATION]
+  To      : (no email)
+  Business: Plumbing Services | Faucets Near You
+  Subject : What's the #1 Thing Holding Your Bathroom Renovation Back?
+  Body    : Hi there, I came across your website and noticed...
+             ...sign off as Alex from GrowthForge
+============================================================
+
